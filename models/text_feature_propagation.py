@@ -23,6 +23,7 @@ class HiAGMTP(nn.Module):
         self.graph_model = graph_model
 
         # linear transform
+        
         self.transformation = nn.Linear(config.model.linear_transformation.text_dimension,
                                         len(self.label_map) * config.model.linear_transformation.node_dimension)
 
@@ -40,15 +41,30 @@ class HiAGMTP(nn.Module):
         :param text_feature ->  torch.FloatTensor, (batch_size, K0, text_dim)
         :return: logits ->  torch.FloatTensor, (batch, N)
         """
-        text_feature = torch.cat(text_feature, 1)
-        text_feature = text_feature.view(text_feature.shape[0], -1)
+        # print(len(text_feature),text_feature[0].shape,"text_feature before cat")
+        # text_feature = torch.cat(text_feature, 1)
+        #print(text_feature.shape,"text feature")
+        # print(text_feature.shape,"text_feature before view")
+        # text_feature = text_feature.view(text_feature.shape[0], -1)
+        # print(text_feature.shape,"text_feature before dropout")
 
-        text_feature = self.transformation_dropout(self.transformation(text_feature))
+        # print(self.config.model.linear_transformation.text_dimension,
+                                        # len(self.label_map) * self.config.model.linear_transformation.node_dimension,"char chawanni")
+        # print("sdfsadfasdfasdfasdf")
+
+        """insert code for bert replacement here"""
+        # print(text_feature.shape)
+
+        text_feature = self.transformation(text_feature).to(self.device)
+        # print(text_feature.shape,"text_feature after transformation")
+        text_feature = self.transformation_dropout(text_feature).to(self.device)
+        # print(text_feature.shape,"text_feature after dropout")
         text_feature = text_feature.view(text_feature.shape[0],
                                          len(self.label_map),
-                                         self.config.model.linear_transformation.node_dimension)
-
-        label_wise_text_feature = self.graph_model(text_feature)
-
-        logits = self.dropout(self.linear(label_wise_text_feature.view(label_wise_text_feature.shape[0], -1)))
+                                         self.config.model.linear_transformation.node_dimension).to(self.device)
+        # print(text_feature.shape,"text_feature after second view")
+        label_wise_text_feature = self.graph_model(text_feature).to(self.device)
+        # print(label_wise_text_feature.shape,"label_wise_text_feature after graph_model")
+        logits = self.dropout(self.linear(label_wise_text_feature.view(label_wise_text_feature.shape[0], -1))).to(self.device)
+        # print(logits.shape, "logits.shape")
         return logits

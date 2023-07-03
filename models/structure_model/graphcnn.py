@@ -106,45 +106,45 @@ class HierarchyGCNModule(nn.Module):
         h_ = inputs.to(self.device)  # batch, N, in_dim
         message_ = torch.zeros_like(h_).to(self.device)  # batch, N, in_dim
 
-        h_in_ = torch.matmul(self.origin_adj * self.adj_matrix, h_)  # batch, N, in_dim
+        h_in_ = torch.matmul(self.origin_adj * self.adj_matrix, h_).to(self.device)  # batch, N, in_dim
         # print(h_in_.shape,self.edge_bias.shape,"shape")
         in_ = h_in_ + self.edge_bias
         in_ = in_
         # N,1,dim
-        in_gate_ = torch.matmul(h_, self.gate_weight)
+        in_gate_ = torch.matmul(h_, self.gate_weight).to(self.device)
         # N, 1
         in_gate_ = in_gate_ + self.bias_gate
         in_ = in_ * F.sigmoid(in_gate_)
-        in_ = self.dropout(in_)
+        in_ = self.dropout(in_).to(self.device)
         message_ += in_  # batch, N, in_dim
 
-        h_output_ = torch.matmul(self.origin_adj.transpose(0, 1) * self.out_adj_matrix, h_)
+        h_output_ = torch.matmul(self.origin_adj.transpose(0, 1) * self.out_adj_matrix, h_).to(self.device)
         out_ = h_output_ + self.out_edge_bias
-        out_gate_ = torch.matmul(h_, self.out_gate_weight)
+        out_gate_ = torch.matmul(h_, self.out_gate_weight).to(self.device)
         out_gate_ = out_gate_ + self.out_bias_gate
-        out_ = out_ * F.sigmoid(out_gate_)
-        out_ = self.dropout(out_)
+        out_ = out_ * F.sigmoid(out_gate_).to(self.device)
+        out_ = self.dropout(out_).to(self.device)
         # print(out_.shape,"out")
         # print(out_,"out_value")
         # print(torch.any(torch.isclose(out_, 1.0, atol=1e-6)).item(),"tt")
-        indices = torch.nonzero(out_, as_tuple=False)
+        indices = torch.nonzero(out_, as_tuple=False).to(self.device)
 
 # 打印值为1的元素的位置
         if indices.numel() > 0:
             positions = indices.tolist()
-            print("值为1的元素的位置为：", positions)
-        with open("out12.txt", 'w') as file:
-          for i, row in enumerate(out_):
-              line = f"维度 {i}: " + ' '.join([str(value) for value in row])
-              file.write(line + '\n')
+            # print("值为1的元素的位置为：", positions)
+        # with open("out12.txt", 'w') as file:
+        #   for i, row in enumerate(out_):
+        #       line = f"维度 {i}: " + ' '.join([str(value) for value in row])
+        #       file.write(line + '\n')
 
           
         
         message_ += out_
 
-        loop_gate = torch.matmul(h_, self.loop_gate)
+        loop_gate = torch.matmul(h_, self.loop_gate).to(self.device)
         loop_ = h_ * F.sigmoid(loop_gate)
-        loop_ = self.dropout(loop_)
+        loop_ = self.dropout(loop_).to(self.device)
         message_ += loop_
 
-        return self.activation(message_)
+        return self.activation(message_).to(self.device)
