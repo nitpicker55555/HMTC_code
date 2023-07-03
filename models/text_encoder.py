@@ -40,12 +40,12 @@ class TextEncoder(nn.Module):
         # text_output = self.dropout(inputs)
         text_output=inputs
         # print(text_output.shape,"text_output.shape")
-        text_output = text_output.transpose(1, 2)
+        text_output = text_output.transpose(1, 2).to(self.device)
         # print(text_output.shape,"text_output.shape_bert")
         topk_text_outputs = []
         for _, conv in enumerate(self.convs):
-            convolution = F.relu(conv(text_output))
-            topk_text = torch.topk(convolution, self.top_k)[0].view(text_output.size(0), -1)
-            topk_text = topk_text.unsqueeze(1)
-            topk_text_outputs.append(topk_text)
+            convolution = F.relu(conv(text_output)).to(self.device)
+            topk_text = torch.topk(convolution, self.top_k)[0].view(text_output.size(0), -1).to(self.device)
+            topk_text = topk_text.unsqueeze(1).to(self.device)
+            topk_text_outputs.append(topk_text).to(self.device)
         return topk_text_outputs

@@ -55,16 +55,16 @@ class HiAGMTP(nn.Module):
         """insert code for bert replacement here"""
         # print(text_feature.shape)
 
-        text_feature = self.transformation(text_feature)
+        text_feature = self.transformation(text_feature).to(self.device)
         # print(text_feature.shape,"text_feature after transformation")
-        text_feature = self.transformation_dropout(text_feature)
+        text_feature = self.transformation_dropout(text_feature).to(self.device)
         # print(text_feature.shape,"text_feature after dropout")
         text_feature = text_feature.view(text_feature.shape[0],
                                          len(self.label_map),
-                                         self.config.model.linear_transformation.node_dimension)
+                                         self.config.model.linear_transformation.node_dimension).to(self.device)
         # print(text_feature.shape,"text_feature after second view")
-        label_wise_text_feature = self.graph_model(text_feature)
+        label_wise_text_feature = self.graph_model(text_feature).to(self.device)
         # print(label_wise_text_feature.shape,"label_wise_text_feature after graph_model")
-        logits = self.dropout(self.linear(label_wise_text_feature.view(label_wise_text_feature.shape[0], -1)))
+        logits = self.dropout(self.linear(label_wise_text_feature.view(label_wise_text_feature.shape[0], -1))).to(self.device)
         # print(logits.shape, "logits.shape")
         return logits

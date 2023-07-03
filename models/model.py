@@ -95,7 +95,7 @@ class HiAGM(nn.Module):
         # get distributed representation of tokens, (batch_size, max_length, embedding_dimension)
         # print(batch['token'],"batch[token]")
         # print(batch['token'])
-        embedding = self.token_embedding(batch['token'])
+        embedding = self.token_embedding(batch['token']).to(self.device)
         
         # print("\n\n")
 
@@ -118,11 +118,11 @@ class HiAGM(nn.Module):
         # print(token_output[0].shape,"token_output[0].shape")
         # print(token_output[1].shape,"token_output[1].shape")
         # print(token_output[2].shape,"token_output[2].shape")
-        token_output_new = embedding[:,0,:]
-        print(token_output_new.shape,"token_output_new.shape")
+        token_output_new = embedding[:,0,:].to(self.device)
+        # print(token_output_new.shape,"token_output_new.shape")
         # print(token_output_new.shape,"token_output_new")
         # logits = self.hiagm(token_output)
-        logits = self.hiagm(token_output_new)
+        logits = self.hiagm(token_output_new).to(self.device)
         # with open("logits.txt", "w") as file:
         #     # Write the variable to the file
         #     file.write(str(logits))

@@ -125,7 +125,7 @@ class EmbeddingLayer(torch.nn.Module):
                     label_dict.append(value)
 
         # 避免模型在前向传播时计算不必要的梯度
-        model.eval()
+        model.eval().to(self.device)
 
         word_embeddings = []
         # print(vocab_id_list, "vocab_id_list")
@@ -187,7 +187,7 @@ class EmbeddingLayer(torch.nn.Module):
 
             # 将这句话的所有单词的词向量添加到word_embeddings列表中
             word_embeddings.append(sentence_embeddings)
-            word_embeddings_tensor = torch.cat(word_embeddings, dim=0)[0]
+            word_embeddings_tensor = torch.cat(word_embeddings, dim=0).to(self.device)[0]
             # with open("label_emb.txt", "w") as file:
             # # Write the variable to the file
             #   file.write(str(word_embeddings_tensor))
@@ -196,5 +196,5 @@ class EmbeddingLayer(torch.nn.Module):
         # [sentences_num, words_num, hidden_size]
 
         # embedding = self.embedding(vocab_id_list)
-        print(word_embeddings_tensor.shape,"word_embeddings_tensor")
+        # print(word_embeddings_tensor.shape,"word_embeddings_tensor")
         return (word_embeddings_tensor)

@@ -87,7 +87,7 @@ class HiAGMLA(nn.Module):
         
         # print(text_feature.shape, "text_feature start")
 
-        text_feature = text_feature.unsqueeze(1)
+        text_feature = text_feature.unsqueeze(1).to(self.device)
 
         # print(text_feature.shape, "text_feature after unsqueeze")
 
@@ -96,17 +96,17 @@ class HiAGMLA(nn.Module):
         else:
             label_embedding = self.label_embedding(torch.arange(0, len(self.label_map)).long().to(self.device))
             # print(label_embedding.shape,"label_embedding")
-            label_embedding = label_embedding.unsqueeze(0)
+            label_embedding = label_embedding.unsqueeze(0).to(self.device)
             # print(label_embedding.shape,"label_embedding after unaqueeze")
 
             tree_label_feature = self.graph_model(label_embedding)
             # print(tree_label_feature.shape,"tree_label_feature")
-            label_feature = tree_label_feature.squeeze(0)
+            label_feature = tree_label_feature.squeeze(0).to(self.device)
             # print(label_feature.shape,"label_feature")
 
-        label_aware_text_feature = self._soft_attention(text_feature, label_feature)
+        label_aware_text_feature = self._soft_attention(text_feature, label_feature).to(self.device)
         # print(label_aware_text_feature.shape,"label_aware_text_feature")
-        label_aware_text_feature = self.linear(label_aware_text_feature.view(label_aware_text_feature.shape[0], -1))
+        label_aware_text_feature = self.linear(label_aware_text_feature.view(label_aware_text_feature.shape[0], -1)).to(self.device)
         # print(label_aware_text_feature.shape,"label_aware_text_feature after linear")
-        logits = self.dropout(label_aware_text_feature)
+        logits = self.dropout(label_aware_text_feature).to(self.device)
         return logits
