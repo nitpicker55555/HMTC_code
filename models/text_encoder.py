@@ -31,7 +31,7 @@ class TextEncoder(nn.Module):
         self.top_k = config.text_encoder.topK_max_pooling
         self.dropout = torch.nn.Dropout(p=config.text_encoder.RNN.dropout)
 
-    def forward(self, inputs,seq_lens):
+    def forward(self, inputs):
         """
         :param inputs: torch.LongTensor, token ids, (batch, max_len)
         :return:
@@ -48,6 +48,4 @@ class TextEncoder(nn.Module):
             topk_text = torch.topk(convolution, self.top_k)[0].view(text_output.size(0), -1)
             topk_text = topk_text.unsqueeze(1)
             topk_text_outputs.append(topk_text)
-        print(len(topk_text_outputs),"topk_text_outputs")
-        print(topk_text_outputs[0].shape,"shape")
         return topk_text_outputs

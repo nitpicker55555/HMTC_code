@@ -196,4 +196,5 @@ class EmbeddingLayer(torch.nn.Module):
         # [sentences_num, words_num, hidden_size]
 
         # embedding = self.embedding(vocab_id_list)
+        print(word_embeddings_tensor.shape,"word_embeddings_tensor")
         return (word_embeddings_tensor)

@@ -132,11 +132,11 @@ class HierarchyGCNModule(nn.Module):
 # 打印值为1的元素的位置
         if indices.numel() > 0:
             positions = indices.tolist()
-            print("值为1的元素的位置为：", positions)
-        with open("out12.txt", 'w') as file:
-          for i, row in enumerate(out_):
-              line = f"维度 {i}: " + ' '.join([str(value) for value in row])
-              file.write(line + '\n')
+            # print("值为1的元素的位置为：", positions)
+        # with open("out12.txt", 'w') as file:
+        #   for i, row in enumerate(out_):
+        #       line = f"维度 {i}: " + ' '.join([str(value) for value in row])
+        #       file.write(line + '\n')
 
           
         
