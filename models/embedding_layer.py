@@ -8,6 +8,7 @@ import helper.logger as logger
 from torch.nn.init import xavier_uniform_, kaiming_uniform_, xavier_normal_, kaiming_normal_, uniform_
 from transformers import BertModel, BertTokenizer
 import logging
+
 torch.set_printoptions(threshold=1000000000000000000000000)  # 设置每行打印的元素数量
 logging.getLogger("transformers").setLevel(logging.ERROR)
 INIT_FUNC = {
@@ -130,12 +131,13 @@ class EmbeddingLayer(torch.nn.Module):
         word_embeddings = []
         # print(vocab_id_list, "vocab_id_list")
         # print(len(vocab_id_list), "len(vocab_id_list)")
-        
+
         if isinstance(vocab_id_list[0], list):
 
             for sentence_id in vocab_id_list:
-                marked_sentence = sentence_id
-
+                marked_sentence = ["<CLS>"]+sentence_id[:-1]
+                # print(marked_sentence)
+                # print(len(marked_sentence))
                 # 使用tokenizer将tokens转为input_ids
                 input_ids = tokenizer.convert_tokens_to_ids(marked_sentence)
 
@@ -160,8 +162,6 @@ class EmbeddingLayer(torch.nn.Module):
             # # Write the variable to the file
             #   file.write(str(word_embeddings_list))
             #   file.write("iter_")
-
-
 
             # print(word_embeddings_tensor.shape, "word_emb")
         else:
@@ -197,4 +197,5 @@ class EmbeddingLayer(torch.nn.Module):
 
         # embedding = self.embedding(vocab_id_list)
         # print(word_embeddings_tensor.shape,"word_embeddings_tensor")
+
         return (word_embeddings_tensor)
