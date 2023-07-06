@@ -22,30 +22,30 @@ class SelfAttention(nn.Module):
         super().__init__()
         self.confg_input=config
 
-        self.self = BartAttention(config.hidden_size, config.num_attention_heads, config.attention_probs_dropout_prob)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.self = BartAttention(config.hidden_size, config.num_attention_heads, config.attention_probs_dropout_prob).to('cuda')
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps).to('cuda')
+        self.dropout = nn.Dropout(config.hidden_dropout_prob).to('cuda').to('cuda')
 
     def forward(self, hidden_states,
                 attention_mask=None, output_attentions=False, extra_attn=None):
         residual = hidden_states
-        print(hidden_states.shape, "SelfAttention input hidden_states")
+        # print(hidden_states.shape, "SelfAttention input hidden_states")
         hidden_states, attn_weights, _ = self.self(
             hidden_states=hidden_states, attention_mask=attention_mask, output_attentions=output_attentions,
             extra_attn=extra_attn,
         )
 
-
-        print(hidden_states.shape, "BartAttention output hidden_states")
+        hidden_states.to('cuda')
+        # print(hidden_states.shape, "BartAttention output hidden_states")
         hidden_states = self.dropout(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = self.layer_norm(hidden_states)
         outputs = (hidden_states,)
-        print(hidden_states.shape,"SelfAttention output hidden_states")
+        # print(hidden_states.shape,"SelfAttention output hidden_states")
 
         if output_attentions:
             outputs += (attn_weights,)
-        print(outputs,"SelfAttention output")
+        # print(outputs,"SelfAttention output")
         return outputs
 
 
@@ -71,10 +71,10 @@ class BartAttention(nn.Module):
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)  #一个权重矩阵，768*768，所以输入的第一维度应该是768
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias).to('cuda')
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias).to('cuda')
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias).to('cuda')  #一个权重矩阵，768*768，所以输入的第一维度应该是768
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias).to('cuda')
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -90,17 +90,17 @@ class BartAttention(nn.Module):
             only_attn=False,
     ):
         """Input shape: Batch x Time x Channel"""
-
+        hidden_states.to('cuda')
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
-        print(hidden_states.shape, "BartAttention input hidden_states")
+        # print(hidden_states.shape, "BartAttention input hidden_states")
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         # get query proj
 
-        print(self.scaling, "self.scaling")
-        query_states = self.q_proj(hidden_states) * self.scaling
+        # print(self.scaling, "self.scaling")
+        query_states = self.q_proj(hidden_states).to('cuda') * self.scaling
 
         # get key, value proj
         if is_cross_attention and past_key_value is not None:
@@ -220,9 +220,9 @@ class GraphLayer(nn.Module):
         self.last = last
         if last:
             #input config.hidden_size int 768
-            self.cross_attn = BartAttention(config.hidden_size, 8, 0.1, True)
-            self.cross_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-            self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+            self.cross_attn = BartAttention(config.hidden_size, 8, 0.1, True).to('cuda')
+            self.cross_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps).to('cuda')
+            self.classifier = nn.Linear(config.hidden_size, config.num_labels).to('cuda')
         self.output_layer = nn.Sequential(nn.Linear(config.hidden_size, config.intermediate_size),
                                           _Actfn(),
                                           nn.Linear(config.intermediate_size, config.hidden_size),
@@ -231,7 +231,11 @@ class GraphLayer(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, label_emb, extra_attn, self_attn_mask, inputs_embeds, cross_attn_mask):
-        print(label_emb.shape,"label_emb in GraphLayer & SelfAttention's hidden_states")
+        label_emb.to('cuda')
+        self_attn_mask.to('cuda')
+        inputs_embeds.to('cuda')
+        cross_attn_mask.to('cuda')
+        # print(label_emb.shape,"label_emb in GraphLayer & SelfAttention's hidden_states")
         if GRAPH == 'GRAPHORMER':
             label_emb = self.hir_attn(label_emb,
                                       attention_mask=self_attn_mask, extra_attn=extra_attn)[0]
@@ -255,7 +259,7 @@ class GraphEncoder(nn.Module):
 
     def __init__(self, config, graph=False, layer=1, data_path=None, threshold=0.01, tau=1):
         super(GraphEncoder, self).__init__()
-        print(config,"config Graph_encoder")
+        # print(config,"config Graph_encoder")
 
         self.config = config
         self.tau = tau
@@ -264,13 +268,14 @@ class GraphEncoder(nn.Module):
 
         self.label_dict = {i: self.tokenizer.decode(v) for i, v in self.label_dict.items()}
         self.label_name = []
-        print(self.label_dict)
+        # print(self.label_dict)
+        #self.label_dict {0: 'ccat', 1: 'ecat', 2: 'gcat', 3: 'mcat', 4: 'c11', 5: 'c12', 6: 'c13', 7: 'c14', 8: 'c15', 9: 'c16', 10: 'c17', 11: 'c18', 12
         for i in range(len(self.label_dict)):
             self.label_name.append(self.label_dict[i])
-        print(self.label_name,"self.label_name original ")  #这时['ccat', 'ecat', 'gcat', 'mcat', 'c11', 'c12', 'c13', 'c14', 'c15', 'c16', 'c1....
+        # print(self.label_name,"self.label_name original ")  #这时['ccat', 'ecat', 'gcat', 'mcat', 'c11', 'c12', 'c13', 'c14', 'c15', 'c16', 'c1....
         self.label_name = self.tokenizer(self.label_name, padding='longest')['input_ids']
-        print(self.label_name,len(self.label_name),"self.label_name tokenizer")  # [[101, 10507, 4017, 102, 0], [101, 14925, 4017, 102, 0], [101, 1043, 11266, 102, 0],
-        self.label_name = nn.Parameter(torch.tensor(self.label_name, dtype=torch.long), requires_grad=False)
+        # print(self.label_name,len(self.label_name),"self.label_name tokenizer")  # [[101, 10507, 4017, 102, 0], [101, 14925, 4017, 102, 0], [101, 1043, 11266, 102, 0],
+        self.label_name = nn.Parameter(torch.tensor(self.label_name, dtype=torch.long), requires_grad=False).to('cuda')
         # print(self.label_name,self.label_name.shape, "self.label_name nn.Parameter") # transfer to tensor
 
         self.hir_layers = nn.ModuleList([GraphLayer(config, last=i == layer - 1) for i in range(layer)])
@@ -355,64 +360,61 @@ class GraphEncoder(nn.Module):
             self.edge_list = nn.Parameter(torch.tensor(self.edge_list).transpose(0, 1), requires_grad=False)
 
     # outputs['inputs_embeds'],attention_mask, labels, lambda x: self.bert.embeddings(x)[0]
-    def forward(self, inputs_embeds, attention_mask, labels, embeddings):
+    def forward(self, label_emb):
+
         # print(inputs_embeds.shape,"inputs_embeds.shape")
         # print(attention_mask.shape,"attention_mask")
         # print(labels.shape,"labels")
-        label_mask = self.label_name != self.tokenizer.pad_token_id
 
-        print(self.label_name.shape, "label_name")
-        print(self.tokenizer.pad_token_id, " self.tokenizer.pad_token_id")
+        #label_mask = self.label_name != self.tokenizer.pad_token_id
+
+        # print(self.label_name.shape, "label_name")
+        # print(self.tokenizer.pad_token_id, " self.tokenizer.pad_token_id")
         # full name
         # torch.Size([103, 5]) label_name
-        label_emb = embeddings(self.label_name)
-        # torch.Size([5, 103]) label_emb
 
-        print(label_emb.shape,"label_emb GE")
-        print(label_mask.shape)
-        label_emb = (label_emb * label_mask.unsqueeze(-1)).sum(dim=1) / label_mask.sum(dim=1).unsqueeze(-1)
-        label_emb = label_emb.unsqueeze(0)
-        print(label_emb.shape, "label_emb GE")
+        # label_emb = embeddings(self.label_name.to('cuda').to('cuda'))
+        #
+        # # torch.Size([5, 103]) label_emb
+        #
+        # # print(label_emb.shape,"label_emb GE")
+        # # print(label_mask.shape)
+        #
+        # label_emb = (label_emb * label_mask.unsqueeze(-1)).sum(dim=1) / label_mask.sum(dim=1).unsqueeze(-1)
+        # label_emb = label_emb.unsqueeze(0)
+
+
+        # print(label_emb.shape, "label_emb GE")
         # label_emb (1, label_num, hidden_size)
-        label_attn_mask = torch.ones(1, label_emb.size(1), device=label_emb.device)
 
-        extra_attn = None
-
-        self_attn_mask = (label_attn_mask * 1.).t().mm(label_attn_mask * 1.).unsqueeze(0).unsqueeze(0)
-        # self_attn_mask (1, 1, label_num, label_num)
-        cross_attn_mask = (attention_mask * 1.).unsqueeze(-1).bmm(
-            (label_attn_mask.unsqueeze(0) * 1.).repeat(attention_mask.size(0), 1, 1))
         expand_size = label_emb.size(-2) // self.label_name.size(0)
         if self.graph:
             if GRAPH == 'GRAPHORMER':
                 label_emb += self.id_embedding(self.label_id[:, None].expand(-1, expand_size)).view(1, -1,
                                                                                                     self.config.hidden_size)
-                extra_attn = self.distance_embedding(self.distance_mat) + self.edge_embedding(self.edge_mat).sum(
-                    dim=1) / (
-                                     self.distance_mat.view(-1, 1) + 1e-8)
-                extra_attn = extra_attn.view(self.label_num, 1, self.label_num, 1).expand(-1, expand_size, -1,
-                                                                                          expand_size)
-                extra_attn = extra_attn.reshape(self.label_num * expand_size, -1)
-            elif GRAPH == 'GCN' or GRAPH == 'GAT':
-                extra_attn = self.edge_list
-        # print(self.hir_layers, "self.hir_layers")
         print(label_emb.shape, "label_emb GE")
-        for hir_layer in self.hir_layers:
-            label_emb = hir_layer(label_emb, extra_attn, self_attn_mask, inputs_embeds, cross_attn_mask)
+        print(len(self.hir_layers),"self.hir_layers")
+        # for hir_layer in self.hir_layers:
+        #     label_emb = hir_layer(label_emb, extra_attn, self_attn_mask, inputs_embeds, cross_attn_mask)
+        # print(label_emb.shape,"label_emb")
         # label_emb (1, label_num, hidden_size)
-        token_probs = label_emb.mean(dim=1).view(attention_mask.size(0), attention_mask.size(1),
-                                                 self.label_name.size(0),
-                                                 )
-        # token_probs (batch_size, sequence_length, label_num) average value in 1 dim of label_emb
-        print(token_probs.shape,"token_probs")
-        print(token_probs)
-        contrast_mask = (F.gumbel_softmax(token_probs, hard=False, dim=-1, tau=self.tau) * labels.unsqueeze(1)).sum(
-            -1)
-        # contrast_mask= gumbel_softmax TO token_probs
-        temp = self.threshold
-        _mask = contrast_mask > temp
-        contrast_mask = contrast_mask + (1 - contrast_mask).detach()
-        contrast_mask = contrast_mask * _mask
-        print(contrast_mask.shape, "contrastive_mask")
+        # token_probs = label_emb.mean(dim=1).view(attention_mask.size(0), attention_mask.size(1),
+        #                                          self.label_name.size(0),
+        #                                          )
+        # # token_probs (batch_size, sequence_length, label_num) average value in 1 dim of label_emb
+        # # print(token_probs.shape,"token_probs")
+        # # print(token_probs)
+        # # contrast_mask = (F.gumbel_softmax(token_probs, hard=False, dim=-1, tau=self.tau) * labels.unsqueeze(1)).sum(
+        #     # -1)
+        # #contrast_mask = (F.gumbel_softmax(token_probs, hard=False, dim=-1, tau=self.tau) * labels).sum(dim=1)
+        # contrast_mask = (F.gumbel_softmax(token_probs, hard=False, dim=-1, tau=self.tau) * labels.unsqueeze(1)).sum(
+        #      -1)
+        # # contrast_mask= gumbel_softmax TO token_probs
+        # temp = self.threshold
+        # _mask = contrast_mask > temp
+        # contrast_mask = contrast_mask + (1 - contrast_mask).detach()
+        #
+        # contrast_mask = contrast_mask * _mask
+        # # print(contrast_mask.shape, "contrastive_mask")
         # contrastive_mask (batch_size, sequence_length, label_num)
-        return contrast_mask
+        return label_emb
