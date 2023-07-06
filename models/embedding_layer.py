@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 # coding:utf-8
 import os
@@ -9,7 +10,7 @@ from torch.nn.init import xavier_uniform_, kaiming_uniform_, xavier_normal_, kai
 from transformers import BertModel, BertTokenizer
 import logging
 
-torch.set_printoptions(threshold=1000000000000000000000000)  # 设置每行打印的元素数量
+# torch.set_printoptions(threshold=1000000000000000000000000)  # 设置每行打印的元素数量
 logging.getLogger("transformers").setLevel(logging.ERROR)
 INIT_FUNC = {
     'uniform': uniform_,
@@ -131,31 +132,22 @@ class EmbeddingLayer(torch.nn.Module):
         word_embeddings = []
         # print(vocab_id_list, "vocab_id_list")
         # print(len(vocab_id_list), "len(vocab_id_list)")
-
+        # input_matrix=torch.ones(1)
         if isinstance(vocab_id_list[0], list):
 
+            # input_tensors = []  # 用于存储每个input_ids的tensor
             for sentence_id in vocab_id_list:
-                marked_sentence = ["<CLS>"]+sentence_id[:-1]
-                # print(marked_sentence)
-                # print(len(marked_sentence))
-                # 使用tokenizer将tokens转为input_ids
+                marked_sentence = ["<CLS>"] + sentence_id[:-1]
                 input_ids = tokenizer.convert_tokens_to_ids(marked_sentence)
-
-                # 将input_ids转为Tensor，并添加一个新的维度以符合BERT的输入需求
                 input_tensor = torch.tensor(input_ids).unsqueeze(0).to(self.device)
 
-                # 获取BERT模型的输出
+                # input_tensors.append(torch.tensor(input_ids))
                 outputs = model(input_tensor)
-
-                # 获取每一个token的隐藏状态
                 sentence_embeddings = outputs[0]
-                # print(sentence_embeddings.device,"sentence_embeddings")
-
-                # 将每一个token的隐藏状态通过线性层，降维到300
-                # sentence_embeddings_300 = linear(sentence_embeddings)
-
-                # 将这句话的所有单词的词向量添加到word_embeddings列表中
                 word_embeddings.append(sentence_embeddings)
+            # 聚合所有input_tensors为一个tensor矩阵
+            # input_matrix = torch.stack(input_tensors, dim=0)
+
             word_embeddings_tensor = torch.cat(word_embeddings, dim=0)
             # word_embeddings_list=word_embeddings_tensor.cpu().tolist()
             # with open("word_emb.txt", "a+") as file:

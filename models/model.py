@@ -54,7 +54,6 @@ class HiAGM(nn.Module):
 
         self.dataflow_type = DATAFLOW_TYPE[model_type]
 
-        # self.text_encoder = TextEncoder(config)
         self.structure_encoder = StructureEncoder(config=config,
                                                   label_map=vocab.v2i['label'],
                                                   device=self.device,
@@ -103,21 +102,6 @@ class HiAGM(nn.Module):
 
         token_output_new = embedding[:, 0, :].to(self.device)
 
-        inputs_embeds = token_output_new.unsqueeze(1).to(self.device)
-        print(inputs_embeds.shape,"inputs_embeds")
-        attention_mask = torch.ones(token_output_new.shape[0], 1).to(self.device)
-        print(attention_mask.shape,"attention_mask")
-        labels = batch['label'].to(self.device)
-        print(labels.shape,"labels")
-
-
-
-        model = GraphEncoder(config=self.pretrain_config.config, graph=False, layer=1, data_path=os.getcwd()+"/data/rcv1",
-                             threshold=0.01, tau=1,)
-
-        model_bert = BertModel(self.pretrain_config.config).to(self.device)
-        output = model.forward(inputs_embeds, attention_mask, labels, lambda x: model_bert.embeddings(x.to(self.device))[0].to(self.device))
-        print(output.shape,"output")
         logits = self.hiagm(token_output_new).to(self.device)
 
         return logits
