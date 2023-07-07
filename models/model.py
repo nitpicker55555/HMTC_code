@@ -9,8 +9,13 @@ from models.multi_label_attention import HiAGMLA
 from models.text_feature_propagation import HiAGMTP
 from models.origin import Classifier
 import torch
+from models.Graph_encoder.graph import GraphEncoder
 # torch.set_printoptions(threshold=1000000)  # 设置每行打印的元素数量
-
+import torch
+from torch import nn
+from transformers import AutoTokenizer
+from transformers import BertModel
+import os
 DATAFLOW_TYPE = {
     'HiAGM-TP': 'serial',
     'HiAGM-LA': 'parallel',
@@ -33,7 +38,7 @@ class HiAGM(nn.Module):
         self.config = config
         self.vocab = vocab
         self.device = config.train.device_setting.device
-
+        self.pretrain_config = BertModel.from_pretrained('bert-base-uncased')
         self.token_map, self.label_map = vocab.v2i['token'], vocab.v2i['label']
 
         self.token_embedding = EmbeddingLayer(
@@ -49,7 +54,6 @@ class HiAGM(nn.Module):
 
         self.dataflow_type = DATAFLOW_TYPE[model_type]
 
-        # self.text_encoder = TextEncoder(config)
         self.structure_encoder = StructureEncoder(config=config,
                                                   label_map=vocab.v2i['label'],
                                                   device=self.device,
@@ -89,44 +93,15 @@ class HiAGM(nn.Module):
         """
         forward pass of the overall architecture
         :param batch: DataLoader._DataLoaderIter[Dict{'token_len': List}], each batch sampled from the current epoch
-        :return: 
+        :return:
         """
 
-        # get distributed representation of tokens, (batch_size, max_length, embedding_dimension)
-        # print(batch['token'],"batch[token]")
-        # print(batch['token'])
+
         embedding = self.token_embedding(batch['token']).to(self.device)
-        
-        # print("\n\n")
 
 
+        token_output_new = embedding[:, 0, :].to(self.device)
 
-        # print(batch['token'].to(self.config.train.device_setting.device),"batch['token'].to(self.config.train.device_setting.device)")
-        ##print(batch['token'],"batch['token'].to(self.config.train.device_setting.device)")
-        #print(batch['token'].shape,"batch.shape")
-
-        # print(embedding,"embedding")
-        # get the length of sequences for dynamic rnn, (batch_size, 1)
-        seq_len = batch['token_len']
-        #print(seq_len,"seqlen")
-        #print(seq_len.shape,"seq_len,shape")
-        # print(embedding.shape,"embedding.shape")
-        # token_output = self.text_encoder(embedding)
-        # print(token_output[0].shape)
-        # print(token_output,"tokenoutput")
-        # print(len(token_output),"token_output.shape")
-        # print(token_output[0].shape,"token_output[0].shape")
-        # print(token_output[1].shape,"token_output[1].shape")
-        # print(token_output[2].shape,"token_output[2].shape")
-        token_output_new = embedding[:,0,:].to(self.device)
-        # print(token_output_new.shape,"token_output_new.shape")
-        # print(token_output_new.shape,"token_output_new")
-        # logits = self.hiagm(token_output)
         logits = self.hiagm(token_output_new).to(self.device)
-        # with open("logits.txt", "w") as file:
-        #     # Write the variable to the file
-        #     file.write(str(logits))
-        #     file.write('\n')
-        # # print(logits,"logits")
-        # print(logits.shape,"logits shape")
+
         return logits

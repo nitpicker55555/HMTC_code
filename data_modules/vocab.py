@@ -10,7 +10,7 @@ import json
 
 
 class Vocab(object):
-    def __init__(self, config, min_freq=1, special_token=['<PADDING>', '<OOV>'], max_size=None):
+    def __init__(self, config, min_freq=1, special_token=['<SEP>','<PADDING>', '<OOV>'], max_size=None):
         """
         vocabulary class for text classification, initialized from pretrained embedding file
         and update based on minimum frequency and maximum size
@@ -79,6 +79,7 @@ class Vocab(object):
                     for k in list(self.v2i[field].keys()):
                         f_out.write(k + '\t' + str(self.freqs[field][k]) + '\n')
                 logger.info('Save Vocabulary in ' + vocab_dir[field])
+        self.sep_index = "<SEP>"
         self.padding_index = self.v2i['token']['<PADDING>']
         self.oov_index = self.v2i['token']['<OOV>']
 

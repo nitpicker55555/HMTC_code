@@ -104,8 +104,15 @@ class ClassificationDataset(Dataset):
             assert sample['label'], 'Label is empty'
         else:
             sample['label'] = [0]
-        sample['token_len'] = min(len(sample['token']), self.max_input_length)
-        padding = [self.vocab.padding_index for _ in range(0, self.max_input_length - len(sample['token']))]
+        # sample['token_len'] = min(len(sample['token']), self.max_input_length)
+        # padding = [self.vocab.padding_index for _ in range(0, self.max_input_length - len(sample['token']))]
+        # sample['token'] += padding
+        # sample['token'] = sample['token'][:self.max_input_length]
+        sample['token_len'] = min(len(sample['token']) + 1, self.max_input_length)  # 考虑到添加 sep_index
+        padding = [self.vocab.padding_index for _ in
+                   range(0, self.max_input_length - len(sample['token']) - 1)]  # 减去添加的 sep_index
+        sample['token'] += [self.vocab.sep_index]  # 在 token 列表的结尾添加 sep_index
         sample['token'] += padding
         sample['token'] = sample['token'][:self.max_input_length]
+
         return sample

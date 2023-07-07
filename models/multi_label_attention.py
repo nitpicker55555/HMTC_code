@@ -5,8 +5,9 @@ import torch
 from torch import nn
 from torch.nn import functional
 from models.embedding_layer import EmbeddingLayer
-
-
+from models.Graph_encoder.graph import GraphEncoder
+import os
+from transformers import BertModel
 class HiAGMLA(nn.Module):
     def __init__(self, config, label_map, model_mode, graph_model, device):
         """
@@ -22,7 +23,7 @@ class HiAGMLA(nn.Module):
         self.config = config
         self.device = device
         self.label_map = label_map
-
+        self.pretrain_config = BertModel.from_pretrained('bert-base-uncased')
         self.label_embedding = EmbeddingLayer(
             vocab_map=self.label_map,
             embedding_dim=config.embedding.label.dimension,
@@ -33,7 +34,12 @@ class HiAGMLA(nn.Module):
             model_mode=model_mode,
             initial_type=config.embedding.label.init_type
         )
-        self.graph_model = graph_model
+        # model = GraphEncoder(config=self.pretrain_config.config, graph=False, layer=1,
+        #                      data_path=os.getcwd() + "/data/rcv1",
+        #                      #  threshold=0.01, tau=1,)
+        self.graph_model = GraphEncoder(config=self.pretrain_config.config, graph=False, layer=1,
+                              data_path=os.getcwd() + "/data/rcv1",
+                                threshold=0.01, tau=1,)  #  replace model
 
         # classifier
         self.linear = nn.Linear(len(self.label_map) * config.embedding.label.dimension,
@@ -50,8 +56,9 @@ class HiAGMLA(nn.Module):
         """
         label_embedding = self.label_embedding(torch.arange(0, len(self.label_map)).long().to(self.device))
         label_embedding = label_embedding.unsqueeze(0)
-
+        print(label_embedding.shape,"label_embedding")
         tree_label_feature = self.graph_model(label_embedding)
+        print(tree_label_feature.shape,"tree_label_feature,graph_output")
         label_feature = tree_label_feature.squeeze(0)
         self.label_feature = label_feature
 
@@ -78,13 +85,13 @@ class HiAGMLA(nn.Module):
         :param text_feature ->  torch.FloatTensor, (batch_size, K0, text_dim)
         :return: logits ->  torch.FloatTensor, (batch, N)
         """
-        
+
         # text_feature = torch.cat(text_feature, 1)
         # print(text_feature.shape, "text_feature before view")
         # print(text_feature.shape,"text_feature")
         # text_feature = text_feature.view(text_feature.shape[0], -1,
-                                        #  self.config.embedding.label.dimension)
-        
+        #  self.config.embedding.label.dimension)
+
         # print(text_feature.shape, "text_feature start")
 
         text_feature = text_feature.unsqueeze(1).to(self.device)
@@ -95,18 +102,19 @@ class HiAGMLA(nn.Module):
             label_feature = self.label_feature
         else:
             label_embedding = self.label_embedding(torch.arange(0, len(self.label_map)).long().to(self.device))
-            # print(label_embedding.shape,"label_embedding")
+            print(label_embedding.shape,"label_embedding")
             label_embedding = label_embedding.unsqueeze(0).to(self.device)
-            # print(label_embedding.shape,"label_embedding after unaqueeze")
-
+            print(label_embedding.shape,"label_embedding after unaqueeze")
             tree_label_feature = self.graph_model(label_embedding)
-            # print(tree_label_feature.shape,"tree_label_feature")
+            print(tree_label_feature.shape,"tree_label_feature_graph output")
             label_feature = tree_label_feature.squeeze(0).to(self.device)
-            # print(label_feature.shape,"label_feature")
+            print(label_feature.shape,"label_feature")
 
         label_aware_text_feature = self._soft_attention(text_feature, label_feature).to(self.device)
-        # print(label_aware_text_feature.shape,"label_aware_text_feature")
-        label_aware_text_feature = self.linear(label_aware_text_feature.view(label_aware_text_feature.shape[0], -1)).to(self.device)
-        # print(label_aware_text_feature.shape,"label_aware_text_feature after linear")
+        print(label_aware_text_feature.shape,"label_aware_text_feature")
+        label_aware_text_feature = self.linear(label_aware_text_feature.view(label_aware_text_feature.shape[0], -1)).to(
+            self.device)
+        print(label_aware_text_feature.shape,"label_aware_text_feature after linear")
         logits = self.dropout(label_aware_text_feature).to(self.device)
+        print(logits.shape,"logits")
         return logits
