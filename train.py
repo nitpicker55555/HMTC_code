@@ -10,10 +10,11 @@ import os
 from data_modules.data_loader import data_loaders
 from data_modules.vocab import Vocab
 from train_modules.criterions import ClassificationLoss
-from train_modules. trainer import Trainer
+from train_modules.trainer import Trainer
 from helper.utils import load_checkpoint, save_checkpoint
 import time
-
+from models.proto.cost_matrix import calc_acm
+os.environ['CUDA_LAUNCH_BLOCKING'] = "0"
 
 def set_optimizer(config, model):
     """
@@ -29,7 +30,7 @@ def set_optimizer(config, model):
         raise TypeError("Recommend the Adam optimizer")
 
 
-def train(config):
+def train(config, device):
     """
     :param config: helper.configure, Configure Object
     """
@@ -40,7 +41,7 @@ def train(config):
 
     # get data
     train_loader, dev_loader, test_loader = data_loaders(config, corpus_vocab)
-
+    
     # build up model
     hiagm = HiAGM(config, corpus_vocab, model_type=config.model.type, model_mode='TRAIN')
     hiagm.to(config.train.device_setting.device)
@@ -52,11 +53,23 @@ def train(config):
     optimize = set_optimizer(config, hiagm)
 
     # get epoch trainer
+    prototype_dim = config.embedding.token.dimension
+    print(corpus_vocab.v2i['label'],"corpus_vocab.v2i['label']")
+    num_labels = len(corpus_vocab.v2i['label'])
+    # print(corpus_vocab.v2i['label'],"corpus_vocab.v2i['label']")
+    # 
+    global_prototype_tensor = torch.randn((num_labels+1, prototype_dim), requires_grad=True, device=device).to(device)
+    # print(global_prototype_tensor.shape,"global_prototype_tensor")
+    ac_matrix = calc_acm(config, corpus_vocab.i2v['label'])
     trainer = Trainer(model=hiagm,
                       criterion=criterion,
                       optimizer=optimize,
                       vocab=corpus_vocab,
-                      config=config)
+                      config=config,
+                      global_prototype_tensor=global_prototype_tensor,
+                      ac_matrix=ac_matrix)
+                      # ,
+                      # global_prototype_tensor=global_prototype_tensor)
 
     # set origin log
     best_epoch = [-1, -1]
@@ -118,6 +131,7 @@ def train(config):
                 'best_performance': best_performance,
                 'optimizer': optimize.state_dict()
             }, os.path.join(model_checkpoint, model_name + '_epoch_' + str(epoch)))
+            torch.save(trainer.global_prototype_tensor, os.path.join(model_checkpoint, 'global_prototypes_epoch_{}.pt'.format(epoch)))
 
         logger.info('Epoch {} Time Cost {} secs.'.format(epoch, time.time() - start_time))
 
@@ -134,6 +148,7 @@ def train(config):
                         config=config,
                         optimizer=optimize)
         trainer.eval(test_loader, best_epoch[1], 'TEST')
+    torch.save(trainer.global_prototype_tensor, os.path.join(model_checkpoint, 'global_prototypes_final.pt'))
 
     return
 
@@ -150,5 +165,5 @@ if __name__ == "__main__":
     logger.Logger(configs)
 
 
-
-    train(configs)
+    device = configs.train.device_setting.device
+    train(configs, device)
