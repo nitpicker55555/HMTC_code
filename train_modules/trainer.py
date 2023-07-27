@@ -119,8 +119,8 @@ class Trainer(object):
                                                  recursive_constrained_params)
 
             # calculate contrastive loss according to different mask
-            label_loss=self.Contrastiveloss(label_information,label_loss_pos_mask,label_loss_neg_mask)
-            sample_loss = self.Contrastiveloss(label_information, sample_loss_pos_mask,sample_loss_neg_mask)
+            label_loss=self.LabelContrastiveloss(label_information,label_loss_pos_mask,label_loss_neg_mask)
+            sample_loss = self.SampleContrastiveloss(label_information, sample_loss_pos_mask,sample_loss_neg_mask)
 
 
 
@@ -171,8 +171,51 @@ class Trainer(object):
         """
         self.model.eval()
         return self.run(data_loader, epoch, stage, mode='EVAL')
+    def SampleContrastiveloss(self, features, positive_mask,negative_mask,temperature=0.07):
+        features = F.normalize(features, dim=2)
 
-    def Contrastiveloss(self, features, positive_mask,negative_mask,temperature=0.07):
+        batch_size, num_labels, _ = features.shape
+
+
+        # reshape features to (batch_size * num_labels, feature_size)
+        features = features.view(batch_size * num_labels, -1)
+
+        # compute all pair-wise similarities
+        anchor_dot_contrast = torch.div(
+            torch.matmul(features, features.T),
+            temperature)
+
+        # for numerical stability
+        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        logits = anchor_dot_contrast - logits_max.detach()
+
+        # mask-out self-contrast cases
+        logits_mask = torch.scatter(
+            torch.ones_like(logits),
+            1,
+            torch.arange(batch_size * num_labels).view(-1, 1).to(self.device),
+            0
+        )
+
+        # compute log_prob
+
+        positive_mask = positive_mask * logits_mask
+        negative_mask=negative_mask*logits_mask
+        exp_logits = torch.exp(logits) * logits_mask
+        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+
+        # compute mean of log-likelihood over positive
+
+        mean_log_prob_pos = (positive_mask * log_prob).sum(1) / positive_mask.sum(1)
+        mean_log_prob_neg = (negative_mask * log_prob).sum(1) / negative_mask.sum(1)
+
+        # loss
+        loss = - 0.5 * (mean_log_prob_pos + mean_log_prob_neg)
+        loss = loss.nanmean()
+        return loss
+
+
+    def LabelContrastiveloss(self, features, positive_mask,negative_mask,temperature=0.07):
         features = F.normalize(features, dim=2)
 
         batch_size, num_labels, _ = features.shape
