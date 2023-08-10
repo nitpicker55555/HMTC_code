@@ -56,60 +56,57 @@ class Trainer(object):
         target_labels = []
         total_loss = 0.0
         num_batch = data_loader.__len__()
+        global memory_bank,memory_bank_size,memory_labels
+        memory_bank=None
+        memory_bank_size=200
 
-        def labelContrastiveMask(labels,distance_matrix):
-            #treat each embedding with same label and label equal to 1 as positive
-            #labels=tensor([[1, 1],[1, 0]]) shape with num_labels，batch_size
-            #mask=tensor([[0,0,1,0],[0,0,0,0],[1,0,0,0],[0,0,0,0]] shape with num_labels*batch_size,num_labels*batch_size
-            num_labels, batch_size = labels.size()
-            mask = torch.zeros(num_labels * batch_size, num_labels * batch_size, dtype=torch.float32)
-
-            for i in range(batch_size):
-                mask[i::batch_size, i::batch_size] = torch.outer(labels[:, i], labels[:, i])
-            positive_mask=mask
-            # reverse positive_mask to get negative_mask
-            negative_mask=~mask
-            # repeat the distance matrix to match the dimension of mask and generate weighted mask
-            distance_matrix = distance_matrix.repeat(mask.shape[0],mask.shape[1])
-            positive_mask=distance_matrix*positive_mask
-            negative_mask=distance_matrix*negative_mask
-            return positive_mask,negative_mask
-
-        def sampleContrastiveMask(labels,distance_matrix):
-
-            #for each sample treat each positive label's embedding as positive
-            #labels=tensor([[1, 1],[1, 0]]) shape with num_labels，batch_size
-            #mask=tensor([[0,1,0,0],[1,0,0,0],[0,0,0,0],[0,0,0,0]] shape with num_labels*batch_size,num_labels*batch_size
-
-            num_labels, batch_size = labels.size()
-            mask = torch.zeros(num_labels * batch_size, num_labels * batch_size, dtype=torch.float32)
-
-            # reshape labels from shape (num_labels, batch_size) to (num_labels * batch_size)
-            labels = labels.view(-1)
-
-            for i in range(num_labels):
-                # get the start and end index for each block of size 'num_labels' in the mask
-                start_idx, end_idx = i * batch_size, (i + 1) * batch_size
-
-                # set mask value to 1 only when both labels values are 1
-                mask[start_idx:end_idx, start_idx:end_idx] = torch.outer(labels[start_idx:end_idx],
-                                                                         labels[start_idx:end_idx])
-            positive_mask=mask
-            # reverse positive_mask to get negative_mask
-            negative_mask=~mask
-            #repeat the distance matrix to match the dimension of mask and generate weighted mask
-            distance_matrix = distance_matrix.repeat(mask.shape[0],mask.shape[1])
-            positive_mask=distance_matrix*positive_mask
-            negative_mask=distance_matrix*negative_mask
-            return positive_mask,negative_mask
+        def labelContrastiveMask(labels, memory_label=None):
+            # treat each embedding with same label and label equal to 1 as positive
+            # labels=tensor([[1, 1],[1, 0]]) shape with num_labels，batch_size
+            # mask=tensor([[1,0,1,0],[0,1,0,0],[1,0,1,0],[0,0,0,0]] shape with num_labels*batch_size,num_labels*batch_size
+            labels = torch.cat([labels, memory_label])
+            labels_reshaped = labels.view(-1, 1)
+            #  broadcasting to calculate equal or not
+            mask = labels_reshaped == labels_reshaped.t()
+            #  bool tensor to float tensor
+            mask = mask.float()
+            positive_mask = mask
+            return positive_mask
+        def memory_generate(batch_examples,labels):
+            global memory_bank,memory_labels
+            if memory_bank == None:
+                memory_bank = batch_examples
+                memory_labels=labels
+            else:
+                memory_bank = torch.cat([memory_bank, batch_examples.detach()], dim=0)
+                memory_labels=torch.cat([memory_labels, labels.detach()], dim=0)
+                if memory_bank.size()[0] > memory_bank_size:
+                    memory_bank = memory_bank[-memory_bank_size:, :]
+                    memory_labels=memory_labels[-memory_bank_size:, :]
 
         for batch in tqdm.tqdm(data_loader):
-            logits, label_information = self.model(batch)
-            positive_mask = torch.zeros((label_information.shape[0], label_information.shape[1]), dtype=torch.int)
-            for idx, labels in enumerate( batch['label_list']):
-                positive_mask[idx, labels] = 1
-            label_loss_pos_mask,label_loss_neg_mask=labelContrastiveMask(positive_mask,torch.tensor(self.ac_matrix).to(self.device) )
-            sample_loss_pos_mask,sample_loss_neg_mask=sampleContrastiveMask(positive_mask,torch.tensor(self.ac_matrix).to(self.device) )
+            logits, label_information = self.model(batch) #label_information 64 103 768
+            """
+            double each label to positive one and negative one 
+            example:
+            label_list = [[1, 2], [0, 1], [0, 2]]
+            positive_mask:
+            tensor([[0., 0., 1., 0., 1., 0.],
+                    [1., 0., 1., 0., 0., 0.],
+                    [1., 0., 0., 0., 1., 0.]])
+            """
+            positive_mask = torch.zeros((label_information.shape[0], label_information.shape[1] * 2), dtype=torch.int).to(
+                self.device)   #generate doubled labels
+
+            for i, sample_labels in enumerate(batch['label_list']):
+                for label in sample_labels:
+                    # set each label positive
+                    positive_mask[i, label * 2] = 1
+                    # else will be 0
+            memory_generate(label_information,positive_mask)
+            label_loss_pos_mask = labelContrastiveMask(positive_mask,memory_labels )
+
+
             if self.config.train.loss.recursive_regularization.flag:
                 recursive_constrained_params = self.model.hiagm.linear.weight
             else:
@@ -119,14 +116,12 @@ class Trainer(object):
                                                  recursive_constrained_params)
 
             # calculate contrastive loss according to different mask
-            label_loss=self.LabelContrastiveloss(label_information,label_loss_pos_mask,label_loss_neg_mask)
-            sample_loss = self.SampleContrastiveloss(label_information, sample_loss_pos_mask,sample_loss_neg_mask)
+            label_loss = self.SampleContrastiveloss(label_information.to(self.device), label_loss_pos_mask.to(self.device), torch.tensor(self.ac_matrix).to(
+                                                                                self.device),memory_bank.to(
+                                                                                self.device))
+            total_loss = label_loss  + classification_loss
 
-
-
-            # calculate total loss
-            total_loss = label_loss+sample_loss+classification_loss
-            print(total_loss, "total_loss")
+            # print(total_loss, "total_loss")
             if mode == 'TRAIN':
                 self.optimizer.zero_grad()
                 total_loss.backward()
@@ -171,90 +166,31 @@ class Trainer(object):
         """
         self.model.eval()
         return self.run(data_loader, epoch, stage, mode='EVAL')
-    def SampleContrastiveloss(self, features, positive_mask,negative_mask,temperature=0.07):
-        features = F.normalize(features, dim=2)
 
+    def SampleContrastiveloss(self,features, positive_mask, cost_matrix, memory_features=None, temperature=0.07):
+
+        # normalize the input tensor along dimension 1
+        features = torch.cat([features, memory_features]).detach()
         batch_size, num_labels, _ = features.shape
-
-
-        # reshape features to (batch_size * num_labels, feature_size)
-        features = features.view(batch_size * num_labels, -1)
-
-        # compute all pair-wise similarities
-        anchor_dot_contrast = torch.div(
-            torch.matmul(features, features.T),
-            temperature)
-
-        # for numerical stability
-        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
-        logits = anchor_dot_contrast - logits_max.detach()
-
-        # mask-out self-contrast cases
-        logits_mask = torch.scatter(
-            torch.ones_like(logits),
-            1,
-            torch.arange(batch_size * num_labels).view(-1, 1).to(self.device),
-            0
-        )
-
-        # compute log_prob
-
-        positive_mask = positive_mask * logits_mask
-        negative_mask=negative_mask*logits_mask
-        exp_logits = torch.exp(logits) * logits_mask
-        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
-
-        # compute mean of log-likelihood over positive
-
-        mean_log_prob_pos = (positive_mask * log_prob).sum(1) / positive_mask.sum(1)
-        mean_log_prob_neg = (negative_mask * log_prob).sum(1) / negative_mask.sum(1)
-
-        # loss
-        loss = - 0.5 * (mean_log_prob_pos + mean_log_prob_neg)
-        loss = loss.nanmean()
-        return loss
-
-
-    def LabelContrastiveloss(self, features, positive_mask,negative_mask,temperature=0.07):
         features = F.normalize(features, dim=2)
-
-        batch_size, num_labels, _ = features.shape
-
-
-        # reshape features to (batch_size * num_labels, feature_size)
         features = features.view(batch_size * num_labels, -1)
-
-        # compute all pair-wise similarities
-        anchor_dot_contrast = torch.div(
-            torch.matmul(features, features.T),
-            temperature)
-
-        # for numerical stability
-        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
-        logits = anchor_dot_contrast - logits_max.detach()
-
-        # mask-out self-contrast cases
-        logits_mask = torch.scatter(
-            torch.ones_like(logits),
-            1,
-            torch.arange(batch_size * num_labels).view(-1, 1).to(self.device),
-            0
-        )
-
-        # compute log_prob
-
+        N = (batch_size ** 2) * num_labels
+        logits_mask = torch.ones_like(positive_mask).to(self.device)
+        self_contrast_mask = 1 - torch.diag(torch.ones((positive_mask.size()[0]))).to(self.device)
+        logits_mask[:, :positive_mask.size()[0]] = logits_mask[:, :positive_mask.size()[0]].clone() * self_contrast_mask
         positive_mask = positive_mask * logits_mask
-        negative_mask=negative_mask*logits_mask
-        exp_logits = torch.exp(logits) * logits_mask
-        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+        # print(positive_mask.shape, "positive_mask")
+        # reshape features to (batch_size * num_labels, feature_size)
+        s = features
+        s_norm = F.normalize(s, p=2, dim=1)
+        d = 1. / (1. + torch.exp(torch.mm(s_norm, s_norm.t())))  # batch_size*num_labels
+        # print(d.shape, "d")
+        exp_s = torch.exp(positive_mask * d)
+        cost_matrix = cost_matrix.repeat_interleave(2, dim=0).repeat_interleave(2, dim=1)# repeat_interleave double cost_matrix
+        cost_matrix = cost_matrix.repeat(batch_size, batch_size)  # repeat cost_matrix to macth batch_size*num_labels
+        exp_mask = torch.exp((1. - positive_mask) * d * cost_matrix)  # apply cost_matrix on negative pairs
+        sum_exp_mask = torch.sum(exp_mask, dim=1, keepdim=True)  # log added here
 
-        # compute mean of log-likelihood over positive
+        pos_loss = - torch.log(torch.sum(exp_s / sum_exp_mask) / N)
+        return (pos_loss)
 
-        mean_log_prob_pos = (positive_mask * log_prob).sum(1) / positive_mask.sum(1)
-        mean_log_prob_neg = (negative_mask * log_prob).sum(1) / negative_mask.sum(1)
-
-        # loss
-        loss = - 0.5 * (mean_log_prob_pos + mean_log_prob_neg)
-        loss = loss.nanmean()
-
-        return loss
