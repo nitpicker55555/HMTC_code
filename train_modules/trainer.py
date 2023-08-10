@@ -61,9 +61,6 @@ class Trainer(object):
         memory_bank_size=200
 
         def labelContrastiveMask(labels, memory_label=None):
-            # treat each embedding with same label and label equal to 1 as positive
-            # labels=tensor([[1, 1],[1, 0]]) shape with num_labels，batch_size
-            # mask=tensor([[1,0,1,0],[0,1,0,0],[1,0,1,0],[0,0,0,0]] shape with num_labels*batch_size,num_labels*batch_size
             labels = torch.cat([labels, memory_label])
             labels_reshaped = labels.view(-1, 1)
             #  broadcasting to calculate equal or not
